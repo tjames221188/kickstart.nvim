@@ -204,6 +204,40 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
+-- Git commit template fun
+function setGitCommitTemplate()
+  local colleagues = {
+    { name = 'Claudio', handle = '@claudiodavid-ai' },
+    { name = 'Rob', handle = '@Shilcof' },
+  }
+  local idx = vim.fn.inputlist(vim.tbl_map(function(author)
+    return author.name
+  end, colleagues))
+  local handle
+  if idx > 0 then
+    handle = ', ' .. colleagues[idx].handle
+  else
+    handle = ''
+  end
+  local branch_name = vim.fn.system 'git rev-parse --abbrev-ref HEAD'
+  local issue_number = string.match(branch_name, '%w+-%d+') or 'TECH'
+  if issue_number ~= nil then
+    local commit_msg = string.format('[%s] ', issue_number)
+    local authors = string.format('Authors: @tjames221188%s', handle)
+    vim.fn.setline(1, commit_msg)
+    vim.fn.setline(2, '')
+    vim.fn.setline(3, authors)
+    vim.api.nvim_win_set_cursor(0, { 1, string.len(commit_msg) })
+  end
+end
+
+vim.cmd [[
+  augroup git_commit_template
+    autocmd!
+    autocmd FileType gitcommit lua setGitCommitTemplate()
+  augroup END
+]]
+
 -- [[ Install `lazy.nvim` plugin manager ]]
 --    See `:help lazy.nvim.txt` or https://github.com/folke/lazy.nvim for more info
 local lazypath = vim.fn.stdpath 'data' .. '/lazy/lazy.nvim'
