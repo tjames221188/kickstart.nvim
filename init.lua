@@ -211,27 +211,89 @@ vim.api.nvim_create_autocmd('TextYankPost', {
   end,
 })
 
--- Git commit template fun
-function setGitCommitTemplate()
-  local colleagues = {
-    { name = 'Claudio', handle = '@claudiodavid-ai' },
-    { name = 'Rob', handle = '@Shilcof' },
-    { name = 'Andrey', handle = '@andrey-bogoyavlenskiy' },
-    { name = 'James', handle = '@James-Allington' },
+local function colleague_picker(callback)
+  local telescope = require 'telescope'
+  local actions = require 'telescope.actions'
+  local state = require 'telescope.actions.state'
+  local pickers = require 'telescope.pickers'
+  local conf = require('telescope.config').values
+
+  local opts = {
+
+    prompt_title = 'Select a Colleague',
+    finder = require('telescope.finders').new_table {
+      results = colleagues,
+      entry_maker = function(entry)
+        return {
+          value = entry,
+          display = entry.name .. ' ' .. entry.handle, -- customize the display format
+          ordinal = entry.name, -- used for sorting
+        }
+      end,
+    },
+    sorter = conf.generic_sorter {},
+    attach_mappings = function(prompt_bufnr, map)
+      map('i', '<CR>', function()
+        local selection = state.get_selected_entry()
+        actions.close(prompt_bufnr)
+        callback(selection.value) -- Call the callback with the selected value
+      end)
+      return true
+    end,
   }
-  local options = {}
-  for i, colleague in ipairs(colleagues) do
-    options[i] = i .. ': ' .. colleague.name
-  end
-  local idx = vim.fn.inputlist(options)
 
-  local handle
-  if idx > 0 then
-    handle = ', ' .. colleagues[idx].handle
-  else
-    handle = ''
-  end
+  -- Ensure the 'pickers' module is correctly accessed
+  pickers.new({}, opts):find()
+end
 
+local colleague_picker = function(opts, callback)
+  local pickers = require 'telescope.pickers'
+  local finders = require 'telescope.finders'
+  local conf = require('telescope.config').values
+  local actions = require 'telescope.actions'
+  local action_state = require 'telescope.actions.state'
+
+  opts = opts
+    or {
+      colleagues = {
+        { name = 'John', handle = '@john' },
+        { name = 'Fred', handle = '@fred-clj' },
+        { name = 'Ethel', handle = '@ethel-clj' },
+      },
+    }
+  pickers
+    .new(opts, {
+      prompt_title = 'Who are you working with?',
+      finder = finders.new_table {
+        results = {
+          { name = 'John', handle = '@john' },
+          { name = 'Fred', handle = '@fred-clj' },
+          { name = 'Ethel', handle = '@ethel-clj' },
+        },
+        entry_maker = function(entry)
+          return {
+            value = entry,
+            display = entry.name,
+            ordinal = entry.name,
+          }
+        end,
+      },
+      sorter = conf.generic_sorter(opts),
+      attach_mappings = function(prompt_bufnr, map)
+        actions.select_default:replace(function()
+          actions.close(prompt_bufnr)
+          local selection = action_state.get_selected_entry()
+          print(vim.inspect(selection))
+          callback(selection)
+        end)
+        return true
+      end,
+    })
+    :find()
+end
+
+-- Git commit template fun
+local function setGitCommitTemplate(buf)
   local branch_name = vim.fn.system 'git rev-parse --abbrev-ref HEAD'
   local issue_number = string.match(branch_name, '%w+-%d+')
   if issue_number == nil then
@@ -239,21 +301,40 @@ function setGitCommitTemplate()
   end
 
   local commit_msg = string.format('[%s] ', string.upper(issue_number))
-  local authors = string.format('Authors: @tjames221188%s', handle)
-  vim.fn.setline(1, commit_msg)
-  vim.fn.setline(2, '')
-  vim.fn.setline(3, authors)
-  vim.api.nvim_win_set_cursor(0, { 1, string.len(commit_msg) })
+
+  local authors = ''
+
+  local colleagues = {
+    { name = 'Claudio', handle = '@Claudiodavid-ai' },
+    { name = 'Rob', handle = '@Shilcof' },
+    { name = 'Andrey', handle = '@andrey-bogoyavlenskiy' },
+    { name = 'James', handle = '@James-Allington' },
+    { name = 'Mo', handle = '@mhyusuf' },
+    { name = 'Toby', handle = '@tobywynne-mellor' },
+  }
+
+  colleague_picker({}, function(colleague)
+    local authors = string.format('Authors: @tjames221188%s', colleague.handle)
+    vim.fn.setbufline(buf, 1, commit_msg)
+    vim.fn.setbufline(buf, 2, '')
+    vim.fn.setbufline(buf, 3, authors)
+    vim.api.nvim_win_set_cursor(0, { 1, string.len(commit_msg) })
+  end)
 end
 
 vim.api.nvim_create_autocmd('BufEnter', {
   desc = 'Add jira ticket number (from branch name) and authors to a commit message',
   pattern = 'COMMIT_EDITMSG',
   callback = function()
+    if vim.b.git_commit_handled then
+      return
+    end
+    vim.b.git_commit_handled = true
     vim.wo.spell = true
+
     if vim.fn.getline(1) == '' then
-      setGitCommitTemplate()
-      vim.cmd 'startinsert!'
+      local buf = vim.fn.bufnr()
+      setGitCommitTemplate(buf)
     end
   end,
   group = vim.api.nvim_create_augroup('Git', { clear = true }),
