@@ -20,6 +20,14 @@ return {
           ['\\'] = 'close_window',
         },
       },
+      filtered_items = {
+        hide_gitignored = true,
+        hide_dotfiles = false,
+        hide_by_pattern = {
+          '*/.terraform',
+          '.git',
+        },
+      },
     },
   },
 }
